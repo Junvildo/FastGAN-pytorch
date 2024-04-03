@@ -63,7 +63,7 @@ if __name__ == "__main__":
     net_ig = Generator( ngf=64, nz=noise_dim, nc=3, im_size=args.im_size)#, big=args.big )
     net_ig.to(device)
 
-    for epoch in [args.multiplier*i for i in range(args.start_iter, args.end_iter+1)]:
+    for epoch in range(args.start_iter * args.multiplier, (args.end_iter + 1) * args.multiplier, args.multiplier):
         ckpt = f"{args.artifacts}/models/{epoch}.pth"
         checkpoint = torch.load(ckpt, map_location=lambda a,b: a)
         # Remove prefix `module`.
