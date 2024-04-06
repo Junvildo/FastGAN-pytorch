@@ -14,7 +14,7 @@ from models import weights_init, Discriminator, Generator
 from operation import copy_G_params, load_params, get_dir
 from operation import ImageFolder, InfiniteSamplerWrapper
 from diffaug import DiffAugment
-policy = 'color,translation'
+policy = 'color,translation,cutout'
 import lpips
 percept = lpips.PerceptualLoss(model='net-lin', net='vgg', use_gpu=True)
 
