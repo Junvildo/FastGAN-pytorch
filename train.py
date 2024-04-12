@@ -14,6 +14,7 @@ from models import weights_init, Discriminator, Generator
 from operation import copy_G_params, load_params, get_dir
 from operation import ImageFolder, InfiniteSamplerWrapper
 from diffaug import DiffAugment
+import pandas as pd
 policy = 'color,translation,cutout'
 import lpips
 percept = lpips.PerceptualLoss(model='net-lin', net='vgg', use_gpu=True)
@@ -130,6 +131,9 @@ def train(args):
         netG = nn.DataParallel(netG.to(device))
         netD = nn.DataParallel(netD.to(device))
     
+    loss_d = []
+    loss_g = []
+
     for iteration in tqdm(range(current_iteration, total_iterations+1)):
         real_image = next(dataloader)
         real_image = real_image.to(device)
@@ -155,6 +159,10 @@ def train(args):
 
         err_g.backward()
         optimizerG.step()
+
+        # Save the loss
+        loss_d.append(err_dr)
+        loss_g.append(-err_g.item())
 
         for p, avg_p in zip(netG.parameters(), avg_param_G):
             avg_p.mul_(0.999).add_(0.001 * p.data)
@@ -183,6 +191,9 @@ def train(args):
                         'g_ema': avg_param_G,
                         'opt_g': optimizerG.state_dict(),
                         'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
+    loss_data = {'epoch': range(current_iteration, total_iterations+1), 'D_loss': loss_d, 'G_loss': loss_g}
+    loss_df = pd.DataFrame(data=loss_data)
+    loss_df.to_csv('loss.csv')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='region gan')
