@@ -109,14 +109,15 @@ def train(args):
     netD.apply(weights_init)
 
     # Freeze or No Freeze
-    if to_freeze:
-        for model in [netG, netD]:
-            for param in model.parameters():
-                param.requires_grad = False
-    else:
+    freeze_list = [netD.down_from_big, netD.down_from_small, netD.down_4, netD.down_8, netD.down_16, netD.down_32, netD.down_64]
+    if ~args.freeze:
         for model in [netG, netD]:
             for param in model.parameters():
                 param.requires_grad = True
+    else:
+        for layer in freeze_list:
+            for param in layer.parameters():
+                param.requires_grad = False
 
     netG.to(device)
     netD.to(device)
