@@ -69,6 +69,7 @@ def train(args):
     current_iteration = args.start_iter
     save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
+    to_freeze = args.freeze
 
     
     device = torch.device("cpu")
@@ -106,6 +107,16 @@ def train(args):
 
     netD = Discriminator(ndf=ndf, im_size=im_size)
     netD.apply(weights_init)
+
+    # Freeze or No Freeze
+    if to_freeze:
+        for model in [netG, netD]:
+            for param in model.parameters():
+                param.requires_grad = False
+    else:
+        for model in [netG, netD]:
+            for param in model.parameters():
+                param.requires_grad = True
 
     netG.to(device)
     netD.to(device)
@@ -209,6 +220,7 @@ if __name__ == "__main__":
     parser.add_argument('--ckpt', type=str, default='None', help='checkpoint weight path if have one')
     parser.add_argument('--workers', type=int, default=2, help='number of workers for dataloader')
     parser.add_argument('--save_interval', type=int, default=100, help='number of iterations to save model')
+    parser.add_argument('--freeze', type=int, default=0, help='to freeze pretrained model params or not, 0=No Freeze, 1=Freeze')
 
     args = parser.parse_args()
     print(args)
