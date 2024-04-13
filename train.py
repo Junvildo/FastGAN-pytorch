@@ -110,7 +110,7 @@ def train(args):
 
     # Freeze or No Freeze
     freeze_list = [netD.down_from_big, netD.down_from_small, netD.down_4, netD.down_8, netD.down_16, netD.down_32, netD.down_64]
-    if ~args.freeze:
+    if args.freeze!=1:
         print('Unfreeze the model')
         for model in [netG, netD]:
             for param in model.parameters():
