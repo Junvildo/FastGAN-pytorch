@@ -14,7 +14,10 @@ def weights_init(m):
             m.weight.data.normal_(0.0, 0.02)
         except:
             pass
-    elif classname.find('BatchNorm') != -1:
+    # elif classname.find('BatchNorm') != -1:
+    #     m.weight.data.normal_(1.0, 0.02)
+    #     m.bias.data.fill_(0)
+    elif classname.find('InstanceNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
@@ -25,7 +28,8 @@ def convTranspose2d(*args, **kwargs):
     return spectral_norm(nn.ConvTranspose2d(*args, **kwargs))
 
 def batchNorm2d(*args, **kwargs):
-    return nn.BatchNorm2d(*args, **kwargs)
+    #return nn.BatchNorm2d(*args, **kwargs)
+    return nn.InstanceNorm2d(*args, **kwargs)
 
 def linear(*args, **kwargs):
     return spectral_norm(nn.Linear(*args, **kwargs))
@@ -166,11 +170,11 @@ class Generator(nn.Module):
         feat_256 = self.se_256( feat_16, self.feat_256(feat_128) )
 
         if self.im_size == 256:
-            return [self.to_big(feat_256), self.to_128(feat_128)]
+            return [torch.tanh(self.to_big(feat_256)), torch.tanh(self.to_128(feat_128))]
         
         feat_512 = self.se_512( feat_32, self.feat_512(feat_256) )
         if self.im_size == 512:
-            return [self.to_big(feat_512), self.to_128(feat_128)]
+            return [torch.tanh(self.to_big(feat_512)), torch.tanh(self.to_128(feat_128))]
 
         feat_1024 = self.feat_1024(feat_512)
 
