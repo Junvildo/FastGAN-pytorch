@@ -69,7 +69,6 @@ def train(args):
     current_iteration = args.start_iter
     save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
-    to_freeze = args.freeze
 
     
     device = torch.device("cpu")

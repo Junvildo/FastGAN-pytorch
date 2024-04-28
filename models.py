@@ -14,10 +14,7 @@ def weights_init(m):
             m.weight.data.normal_(0.0, 0.02)
         except:
             pass
-    # elif classname.find('BatchNorm') != -1:
-    #     m.weight.data.normal_(1.0, 0.02)
-    #     m.bias.data.fill_(0)
-    elif classname.find('InstanceNorm') != -1:
+    elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
