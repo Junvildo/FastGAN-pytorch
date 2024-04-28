@@ -111,9 +111,6 @@ def train(args):
     freeze_list = [netD.down_from_big, netD.down_from_small, netD.down_4, netD.down_8, netD.down_16, netD.down_32, netD.down_64]
     if args.freeze!=1:
         print('Unfreeze the model')
-        for model in [netG, netD]:
-            for param in model.parameters():
-                param.requires_grad = True
     else:
         print('Freeze the Discriminator')
         for layer in freeze_list:
