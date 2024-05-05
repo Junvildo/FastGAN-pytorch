@@ -25,8 +25,8 @@ def convTranspose2d(*args, **kwargs):
     return spectral_norm(nn.ConvTranspose2d(*args, **kwargs))
 
 def batchNorm2d(*args, **kwargs):
-    #return nn.BatchNorm2d(*args, **kwargs)
-    return nn.InstanceNorm2d(*args, **kwargs, track_running_stats=True)
+    return nn.BatchNorm2d(*args, **kwargs)
+    #return nn.InstanceNorm2d(*args, **kwargs, track_running_stats=True)
 
 def linear(*args, **kwargs):
     return spectral_norm(nn.Linear(*args, **kwargs))
