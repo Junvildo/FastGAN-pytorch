@@ -74,7 +74,7 @@ def train(args):
 
     
     device = torch.device("cpu")
-    if use_cuda:
+    if use_cuda and torch.cuda.is_available():
         device = torch.device("cuda:0")
 
     transform_list = [
