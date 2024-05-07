@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 from torchvision import utils as vutils
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 import argparse
 import random
@@ -62,13 +63,14 @@ def train(args):
     ngf = 64
     nz = 256
     nlr = 0.0002
-    nbeta1 = 0.2
+    nbeta1 = 0.5
     use_cuda = True
     multi_gpu = True
     dataloader_workers = args.workers
     current_iteration = args.start_iter
     save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
+
 
     
     device = torch.device("cpu")
@@ -126,6 +128,11 @@ def train(args):
     
     optimizerG = optim.Adam(netG.parameters(), lr=nlr, betas=(nbeta1, 0.999))
     optimizerD = optim.Adam(netD.parameters(), lr=nlr, betas=(nbeta1, 0.999))
+    
+    
+    # Initialize the learning rate schedulers
+    schedulerG = CosineAnnealingWarmRestarts(optimizerG, T_0=1000, T_mult=1, eta_min=1e-5)
+    schedulerD = CosineAnnealingWarmRestarts(optimizerD, T_0=1000, T_mult=1, eta_min=1e-5)
 
     if checkpoint != 'None':
         ckpt = torch.load(checkpoint)
@@ -161,7 +168,8 @@ def train(args):
         err_dr, rec_img_all, rec_img_small, rec_img_part = train_d(netD, real_image, label="real")
         train_d(netD, [fi.detach() for fi in fake_images], label="fake")
         optimizerD.step()
-        
+        schedulerD.step()  # Step the scheduler for the discriminator
+
         ## 3. train Generator
         netG.zero_grad()
         pred_g = netD(fake_images, "fake")
@@ -169,6 +177,7 @@ def train(args):
 
         err_g.backward()
         optimizerG.step()
+        schedulerG.step()  # Step the scheduler for the generator
 
         # Save the loss
         loss_d.append(err_dr)
@@ -177,10 +186,10 @@ def train(args):
         for p, avg_p in zip(netG.parameters(), avg_param_G):
             avg_p.mul_(0.999).add_(0.001 * p.data)
 
-        if iteration % 100 == 0:
+        if iteration % 1000 == 0:
             print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
           
-        if iteration % (save_interval*10) == 0:
+        if iteration % (save_interval*50) == 0:
             backup_para = copy_G_params(netG)
             load_params(netG, avg_param_G)
             with torch.no_grad():
@@ -191,7 +200,7 @@ def train(args):
                         rec_img_part]).add(1).mul(0.5), saved_image_folder+'/rec_%d.jpg'%iteration )
             load_params(netG, backup_para)
 
-        if iteration % (save_interval*50) == 0 or iteration == total_iterations:
+        if iteration % (save_interval*100) == 0 or iteration == total_iterations:
             backup_para = copy_G_params(netG)
             load_params(netG, avg_param_G)
             torch.save({'g':netG.state_dict(),'d':netD.state_dict()}, saved_model_folder+'/%d.pth'%iteration)
