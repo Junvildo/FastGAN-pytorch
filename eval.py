@@ -73,7 +73,10 @@ if __name__ == "__main__":
 
     del checkpoint
 
-    dist = 'eval'
+    if args.dist == '.':
+        dist = 'eval'
+    else:
+        dist = args.dist
     dist = os.path.join(dist, 'img')
     os.makedirs(dist, exist_ok=True)
 

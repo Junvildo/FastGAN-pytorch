@@ -16,7 +16,7 @@ from operation import copy_G_params, load_params, get_dir
 from operation import ImageFolder, InfiniteSamplerWrapper
 from diffaug import DiffAugment
 import pandas as pd
-policy = 'color,translation'
+policy = 'color,translation,cutout'
 import lpips
 percept = lpips.PerceptualLoss(model='net-lin', net='vgg', use_gpu=True)
 
@@ -64,7 +64,7 @@ def train(args):
     nz = 256
     nlr = 0.0002
     nbeta1 = 0.5
-    use_cuda = True
+    use_cuda = False
     multi_gpu = True
     dataloader_workers = args.workers
     current_iteration = args.start_iter
