@@ -64,7 +64,7 @@ def train(args):
     nz = 256
     nlr = 0.0002
     nbeta1 = 0.5
-    use_cuda = False
+    use_cuda = True
     multi_gpu = True
     dataloader_workers = args.workers
     current_iteration = args.start_iter
