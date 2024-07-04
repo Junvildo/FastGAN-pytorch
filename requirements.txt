@@ -8,3 +8,4 @@ opencv-python
 easing-functions
 torchvision
 matplotlib
+pytorch-fid
