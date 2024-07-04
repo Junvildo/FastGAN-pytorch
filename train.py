@@ -16,12 +16,12 @@ from operation import copy_G_params, load_params, get_dir
 from operation import ImageFolder, InfiniteSamplerWrapper
 from diffaug import DiffAugment
 import pandas as pd
+import wandb
+import subprocess
+
 policy = 'color,translation,cutout'
 import lpips
 percept = lpips.PerceptualLoss(model='net-lin', net='vgg', use_gpu=True)
-
-
-#torch.backends.cudnn.benchmark = True
 
 def crop_image_by_part(image, part):
     hw = image.shape[2]//2
@@ -53,6 +53,7 @@ def train_d(net, data, label="real"):
         
 
 def train(args):
+    wandb.init(project="FastGAN_PixelShuffle_bz16", config=args)
 
     data_root = args.path
     total_iterations = args.iter
@@ -70,11 +71,13 @@ def train(args):
     current_iteration = args.start_iter
     save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
+    base_fid_cmd = 'python -m pytorch_fid art-painting/img_gen/ art-painting/img_gen/ --dims 64 --batch-size 4 --num-workers 6'
+    base_gen_cmd = '!python /content/FastGAN-pytorch/eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt /content/drive/MyDrive/Data_For_Colab/FastGAN-pretrained/all_50000_pixel_shuffle.pth --dist /content/dis_1_diff_3_bz_8_pixel_shuffle/'
+    fid_cmd = [part for part in base_fid_cmd.split(' ')]
+    gen_cmd = [part for part in base_gen_cmd.split(' ')]
 
-
-    
     device = torch.device("cpu")
-    if use_cuda and torch.cuda.is_available():
+    if use_cuda:
         device = torch.device("cuda:0")
 
     transform_list = [
@@ -91,25 +94,15 @@ def train(args):
     else:
         dataset = ImageFolder(root=data_root, transform=trans)
 
-   
     dataloader = iter(DataLoader(dataset, batch_size=batch_size, shuffle=False,
                       sampler=InfiniteSamplerWrapper(dataset), num_workers=dataloader_workers, pin_memory=True))
-    '''
-    loader = MultiEpochsDataLoader(dataset, batch_size=batch_size, 
-                               shuffle=True, num_workers=dataloader_workers, 
-                               pin_memory=True)
-    dataloader = CudaDataLoader(loader, 'cuda')
-    '''
     
-    
-    #from model_s import Generator, Discriminator
     netG = Generator(ngf=ngf, nz=nz, im_size=im_size)
     netG.apply(weights_init)
 
     netD = Discriminator(ndf=ndf, im_size=im_size)
     netD.apply(weights_init)
 
-    # Freeze or No Freeze
     freeze_list = [netD.down_from_big, netD.down_from_small, netD.down_4, netD.down_8, netD.down_16, netD.down_32, netD.down_64]
     if args.freeze!=1:
         print('Unfreeze the model')
@@ -129,10 +122,8 @@ def train(args):
     optimizerG = optim.Adam(netG.parameters(), lr=nlr, betas=(nbeta1, 0.999))
     optimizerD = optim.Adam(netD.parameters(), lr=nlr, betas=(nbeta1, 0.999))
     
-    
-    # Initialize the learning rate schedulers
-    schedulerG = CosineAnnealingWarmRestarts(optimizerG, T_0=1000, T_mult=1, eta_min=1e-5)
-    schedulerD = CosineAnnealingWarmRestarts(optimizerD, T_0=1000, T_mult=1, eta_min=1e-5)
+    schedulerG = CosineAnnealingWarmRestarts(optimizerG, T_0=500, T_mult=1, eta_min=1e-5)
+    schedulerD = CosineAnnealingWarmRestarts(optimizerD, T_0=500, T_mult=1, eta_min=1e-5)
 
     if checkpoint != 'None':
         ckpt = torch.load(checkpoint)
@@ -162,32 +153,48 @@ def train(args):
         real_image = DiffAugment(real_image, policy=policy)
         fake_images = [DiffAugment(fake, policy=policy) for fake in fake_images]
         
-        ## 2. train Discriminator
         netD.zero_grad()
-
         err_dr, rec_img_all, rec_img_small, rec_img_part = train_d(netD, real_image, label="real")
         train_d(netD, [fi.detach() for fi in fake_images], label="fake")
         optimizerD.step()
-        schedulerD.step()  # Step the scheduler for the discriminator
+        schedulerD.step()
 
-        ## 3. train Generator
         netG.zero_grad()
         pred_g = netD(fake_images, "fake")
         err_g = -pred_g.mean()
 
         err_g.backward()
         optimizerG.step()
-        schedulerG.step()  # Step the scheduler for the generator
+        schedulerG.step()
 
-        # Save the loss
         loss_d.append(err_dr)
         loss_g.append(-err_g.item())
+        wandb.log({"loss_d": err_dr, "loss_g": -err_g.item(), "lr_G": optimizerG.param_groups[0]['lr'], "lr_D": optimizerD.param_groups[0]['lr']})
+
 
         for p, avg_p in zip(netG.parameters(), avg_param_G):
             avg_p.mul_(0.999).add_(0.001 * p.data)
+        
+        if iteration % 5000 == 0:
+            with torch.no_grad():
+                # Generate 5000 images
+                subprocess.Popen(gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
-        if iteration % 1000 == 0:
-            print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
+                # Calculate FID
+                proc = subprocess.Popen(fid_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                o, _ = proc.communicate()
+                fid = float(o.decode('ascii').replace('FID:  ','').strip('\n'))
+                wandb.log({"FID": fid})
+
+
+        if iteration % 200 == 0:
+            with torch.no_grad():
+                fake_images = netG(fixed_noise)
+                real_grid = vutils.make_grid(real_image, normalize=True)
+                fake_grid = vutils.make_grid(fake_images, normalize=True)
+                wandb.log({"Real Images": [wandb.Image(real_grid, caption="Real Images")],
+                           "Generated Images": [wandb.Image(fake_grid, caption="Generated Images")]})
+    
           
         if iteration % (save_interval*50) == 0:
             backup_para = copy_G_params(netG)

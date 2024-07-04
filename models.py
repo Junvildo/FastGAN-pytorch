@@ -26,7 +26,6 @@ def convTranspose2d(*args, **kwargs):
 
 def batchNorm2d(*args, **kwargs):
     return nn.BatchNorm2d(*args, **kwargs)
-    #return nn.InstanceNorm2d(*args, **kwargs, track_running_stats=True)
 
 def linear(*args, **kwargs):
     return spectral_norm(nn.Linear(*args, **kwargs))
@@ -99,7 +98,8 @@ class InitLayer(nn.Module):
 
 def UpBlock(in_planes, out_planes):
     block = nn.Sequential(
-        nn.Upsample(scale_factor=2, mode='nearest'),
+        conv2d(in_planes, in_planes * 4, kernel_size=1, stride=1, padding=0, bias=False),
+        nn.PixelShuffle(upscale_factor=2),
         conv2d(in_planes, out_planes*2, 3, 1, 1, bias=False),
         #convTranspose2d(in_planes, out_planes*2, 4, 2, 1, bias=False),
         batchNorm2d(out_planes*2), GLU())
@@ -108,7 +108,8 @@ def UpBlock(in_planes, out_planes):
 
 def UpBlockComp(in_planes, out_planes):
     block = nn.Sequential(
-        nn.Upsample(scale_factor=2, mode='nearest'),
+        conv2d(in_planes, in_planes * 4, kernel_size=1, stride=1, padding=0, bias=False),
+        nn.PixelShuffle(upscale_factor=2),
         conv2d(in_planes, out_planes*2, 3, 1, 1, bias=False),
         #convTranspose2d(in_planes, out_planes*2, 4, 2, 1, bias=False),
         NoiseInjection(),
@@ -130,7 +131,7 @@ class Generator(nn.Module):
             nfc[k] = int(v*ngf)
 
         self.im_size = im_size
-
+        
         self.init = InitLayer(nz, channel=nfc[4])
                                 
         self.feat_8   = UpBlockComp(nfc[4], nfc[8])
