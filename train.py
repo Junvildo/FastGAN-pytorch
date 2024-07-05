@@ -141,7 +141,8 @@ def train(args):
     loss_g = []
 
     for iteration in tqdm(range(current_iteration, total_iterations+1)):
-        real_image = next(dataloader)
+        real_image_base = next(dataloader)
+        real_image = real_image_base
         real_image = real_image.to(device)
         current_batch_size = real_image.size(0)
         noise = torch.Tensor(current_batch_size, nz).normal_(0, 1).to(device)
@@ -175,8 +176,7 @@ def train(args):
         
         if iteration % 2000 == 0:
             with torch.no_grad():
-                fake_images = netG(noise)[0]
-                real_grid = vutils.make_grid(real_image, normalize=True)
+                real_grid = vutils.make_grid(real_image_base, normalize=True)
                 fake_grid = vutils.make_grid(fake_images, normalize=True)
                 wandb.log({"Real Images": [wandb.Image(real_grid, caption="Real Images")],
                            "Generated Images": [wandb.Image(fake_grid, caption="Generated Images")]})
