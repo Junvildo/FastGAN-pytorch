@@ -205,9 +205,9 @@ def train(args):
                         'opt_g': optimizerG.state_dict(),
                         'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
             fid_cmd = [part for part in base_fid_cmd.split(' ')]
-            gen_cmd = [part for part in base_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, saved_image_folder=args.gen_path).split(' ')]
-            create_gen_cmd = [part for part in base_create_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, saved_image_folder=args.gen_path).split(' ')]
-            delete_gen_cmd = [part for part in base_delete_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, saved_image_folder=args.gen_path).split(' ')]
+            gen_cmd = [part for part in base_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, gen_image_folder=args.gen_path).split(' ')]
+            create_gen_cmd = [part for part in base_create_gen_cmd.format(gen_image_folder=args.gen_path).split(' ')]
+            delete_gen_cmd = [part for part in base_delete_gen_cmd.format(gen_image_folder=args.gen_path).split(' ')]
 
             with torch.no_grad():
                 # Generate 5000 images
