@@ -72,7 +72,7 @@ def train(args):
     save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
     gen_image_folder = args.gen_path
-    base_fid_cmd = 'python -m pytorch_fid {data_root} {gen_image_folder} --dims 2048 --batch-size 50 --num-workers {dataloader_workers}'.format(data_root=data_root, gen_image_folder=gen_image_folder, dataloader_workers=dataloader_workers)
+    base_fid_cmd = 'python -m pytorch_fid {data_root} {gen_image_folder} --dims 2048 --num-workers {dataloader_workers}'.format(data_root=data_root, gen_image_folder=gen_image_folder, dataloader_workers=dataloader_workers)
     base_gen_cmd = 'python /kaggle/working/FastGAN-pytorch/eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt {trained_model_path} --dist {gen_image_folder} --cuda 0'
     base_create_gen_cmd = 'mkdir -p {gen_image_folder}'
     base_delete_gen_cmd = 'rm -rf {gen_image_folder}'
@@ -169,7 +169,10 @@ def train(args):
 
         loss_d.append(err_dr)
         loss_g.append(-err_g.item())
-        wandb.log({"loss_d": err_dr, "loss_g": -err_g.item(), "lr_G": optimizerG.param_groups[0]['lr'], "lr_D": optimizerD.param_groups[0]['lr']})
+
+        if iteration % 1000 == 0:
+            print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
+            wandb.log({"loss_d": err_dr, "loss_g": -err_g.item(), "lr_G": optimizerG.param_groups[0]['lr'], "lr_D": optimizerD.param_groups[0]['lr']})
 
 
         for p, avg_p in zip(netG.parameters(), avg_param_G):
