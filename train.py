@@ -97,7 +97,7 @@ def train(args):
     saved_model_folder, saved_image_folder = get_dir(args)
     gen_image_folder = args.gen_path
     base_fid_cmd = 'python -m pytorch_fid {data_root} {gen_image_folder}/img --dims 2048 --num-workers {dataloader_workers}'.format(data_root=data_root, gen_image_folder=gen_image_folder, dataloader_workers=dataloader_workers)
-    base_gen_cmd = 'python ./eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt {trained_model_path} --dist {gen_image_folder} --cuda 0'
+    base_gen_cmd = 'python /kaggle/working/FastGAN-pytorch/eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt {trained_model_path} --dist {gen_image_folder} --cuda 0'
     
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
