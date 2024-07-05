@@ -183,7 +183,6 @@ def train(args):
         autoclip_gradient(netG, grad_history, clip_percentile)
         optimizerG.step()
         schedulerG.step()
-        print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
         if iteration % 1000 == 0:
             print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
         wandb.log({"loss_d": err_dr, "loss_g": -err_g.item(), "lr_G": optimizerG.param_groups[0]['lr'], "lr_D": optimizerD.param_groups[0]['lr']})
@@ -225,10 +224,14 @@ def train(args):
             fid_cmd = [part for part in base_fid_cmd.split(' ')]
             gen_cmd = [part for part in base_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, gen_image_folder=args.gen_path).split(' ')]
             with torch.no_grad():
+                if not os.path.exists(gen_image_folder):
+                    os.mkdir(gen_image_folder)
                 # Generate 5000 images
                 subprocess.Popen(gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
                 # Calculate FID
+                if not os.path.exists(gen_image_folder):
+                    os.mkdir(gen_image_folder)
                 proc = subprocess.Popen(fid_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 o, _ = proc.communicate()
                 fid = float(o.decode('ascii').replace('FID:  ','').strip('\n'))
