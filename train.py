@@ -224,19 +224,17 @@ def train(args):
             fid_cmd = [part for part in base_fid_cmd.split(' ')]
             gen_cmd = [part for part in base_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, gen_image_folder=args.gen_path).split(' ')]
             with torch.no_grad():
-                if not os.path.exists(gen_image_folder):
+                if not os.path.exists(os.path.join(os.getcwd(),gen_image_folder)):
                     os.mkdir(gen_image_folder)
                 # Generate 5000 images
                 subprocess.Popen(gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
                 # Calculate FID
-                if not os.path.exists(gen_image_folder):
-                    os.mkdir(gen_image_folder)
                 proc = subprocess.Popen(fid_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 o, _ = proc.communicate()
                 fid = float(o.decode('ascii').replace('FID:  ','').strip('\n'))
                 wandb.log({"FID": fid})
-                if os.path.exists(gen_image_folder):
+                if os.path.exists(os.path.join(os.getcwd(),gen_image_folder)):
                     shutil.rmtree(gen_image_folder)
 
     del netG
