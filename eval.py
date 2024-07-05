@@ -55,7 +55,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     noise_dim = 256
-    device = torch.device('cuda:%d'%(args.cuda)) if torch.cuda.is_available() else torch.device('cpu')
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     
     net_ig = Generator( ngf=64, nz=noise_dim, nc=3, im_size=args.im_size)#, big=args.big )
     net_ig.to(device)
