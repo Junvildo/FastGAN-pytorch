@@ -6,6 +6,7 @@ from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 from torchvision import utils as vutils
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+import numpy as np
 
 import argparse
 import random
@@ -23,7 +24,7 @@ import shutil
 
 policy = 'color,translation,cutout'
 import lpips
-percept = lpips.PerceptualLoss(model='net-lin', net='vgg', use_gpu=True)
+percept = lpips.PerceptualLoss(model='net-lin', net='vgg', use_gpu=False)
 
 def crop_image_by_part(image, part):
     hw = image.shape[2]//2
@@ -53,9 +54,29 @@ def train_d(net, data, label="real"):
         err.backward()
         return pred.mean().item()
         
+# Function to calculate gradient norm
+def _get_grad_norm(model):
+    total_norm = 0
+    for p in model.parameters():
+        if p.grad is not None:
+            param_norm = p.grad.data.norm(2)
+            total_norm += param_norm.item() ** 2
+    total_norm = total_norm ** (1. / 2)
+    return total_norm
+
+# Function to perform gradient clipping based on percentile
+def autoclip_gradient(model, grad_history, clip_percentile):
+    obs_grad_norm = _get_grad_norm(model)
+    grad_history.append(obs_grad_norm)
+    clip_value = np.percentile(grad_history, clip_percentile)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
 
 def train(args):
-    wandb.init(project="FastGAN_PixelShuffle_bz16", config=args)
+    if args.log == 'no':
+        wandb_mode = 'disabled'
+    else:
+        wandb_mode = 'online'
+    wandb.init(project="FastGAN_PixelShuffle_bz16", config=args, mode=wandb_mode)
 
     data_root = args.path
     total_iterations = args.iter
@@ -72,12 +93,14 @@ def train(args):
     dataloader_workers = args.workers
     current_iteration = args.start_iter
     save_interval = args.save_interval
+    clip_percentile = 10
+    grad_history = []
     saved_model_folder, saved_image_folder = get_dir(args)
     gen_image_folder = args.gen_path
     base_fid_cmd = 'python -m pytorch_fid {data_root} {gen_image_folder}/img --dims 2048 --num-workers {dataloader_workers}'.format(data_root=data_root, gen_image_folder=gen_image_folder, dataloader_workers=dataloader_workers)
-    base_gen_cmd = 'python /kaggle/working/FastGAN-pytorch/eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt {trained_model_path} --dist {gen_image_folder} --cuda 0'
+    base_gen_cmd = 'python ./eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt {trained_model_path} --dist {gen_image_folder} --cuda 0'
     device = torch.device("cpu")
-    if use_cuda:
+    if use_cuda and torch.cuda.is_available():
         device = torch.device("cuda:0")
 
     transform_list = [
@@ -87,12 +110,8 @@ def train(args):
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ]
     trans = transforms.Compose(transform_list)
-    
-    if 'lmdb' in data_root:
-        from operation import MultiResolutionDataset
-        dataset = MultiResolutionDataset(data_root, trans, 1024)
-    else:
-        dataset = ImageFolder(root=data_root, transform=trans)
+
+    dataset = ImageFolder(root=data_root, transform=trans)
 
     dataloader = iter(DataLoader(dataset, batch_size=batch_size, shuffle=False,
                       sampler=InfiniteSamplerWrapper(dataset), num_workers=dataloader_workers, pin_memory=True))
@@ -119,11 +138,11 @@ def train(args):
 
     fixed_noise = torch.FloatTensor(8, nz).normal_(0, 1).to(device)
     
-    optimizerG = optim.Adam(netG.parameters(), lr=nlr, betas=(nbeta1, 0.999))
-    optimizerD = optim.Adam(netD.parameters(), lr=nlr, betas=(nbeta1, 0.999))
+    optimizerG = optim.AdamW(netG.parameters(), lr=nlr, betas=(nbeta1, 0.999), weight_decay=0.01)
+    optimizerD = optim.AdamW(netD.parameters(), lr=nlr, betas=(nbeta1, 0.999), weight_decay=0.01)
     
-    schedulerG = CosineAnnealingWarmRestarts(optimizerG, T_0=500, T_mult=1, eta_min=1e-5)
-    schedulerD = CosineAnnealingWarmRestarts(optimizerD, T_0=500, T_mult=1, eta_min=1e-5)
+    schedulerG = CosineAnnealingWarmRestarts(optimizerG, T_0=1000, T_mult=2, eta_min=1e-6)
+    schedulerD = CosineAnnealingWarmRestarts(optimizerD, T_0=1000, T_mult=2, eta_min=1e-6)
 
     if checkpoint != 'None':
         ckpt = torch.load(checkpoint)
@@ -139,8 +158,6 @@ def train(args):
         netG = nn.DataParallel(netG.to(device))
         netD = nn.DataParallel(netD.to(device))
     
-    loss_d = []
-    loss_g = []
 
     for iteration in tqdm(range(current_iteration, total_iterations+1)):
         real_image = next(dataloader)
@@ -156,6 +173,7 @@ def train(args):
         netD.zero_grad()
         err_dr, rec_img_all, rec_img_small, rec_img_part = train_d(netD, real_image, label="real")
         train_d(netD, [fi.detach() for fi in fake_images], label="fake")
+        autoclip_gradient(netD, grad_history, clip_percentile)
         optimizerD.step()
         schedulerD.step()
 
@@ -164,12 +182,10 @@ def train(args):
         err_g = -pred_g.mean()
 
         err_g.backward()
+        autoclip_gradient(netG, grad_history, clip_percentile)
         optimizerG.step()
         schedulerG.step()
-
-        loss_d.append(err_dr)
-        loss_g.append(-err_g.item())
-
+        print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
         if iteration % 1000 == 0:
             print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
         wandb.log({"loss_d": err_dr, "loss_g": -err_g.item(), "lr_G": optimizerG.param_groups[0]['lr'], "lr_D": optimizerD.param_groups[0]['lr']})
@@ -197,7 +213,7 @@ def train(args):
                         rec_img_part]).add(1).mul(0.5), saved_image_folder+'/rec_%d.jpg'%iteration )
             load_params(netG, backup_para)
 
-        if iteration % (save_interval*100) == 0 or iteration == total_iterations:
+        if iteration % save_interval == 0 or iteration == total_iterations:
             backup_para = copy_G_params(netG)
             load_params(netG, avg_param_G)
             torch.save({'g':netG.state_dict(),'d':netD.state_dict()}, saved_model_folder+'/%d.pth'%iteration)
@@ -207,9 +223,9 @@ def train(args):
                         'g_ema': avg_param_G,
                         'opt_g': optimizerG.state_dict(),
                         'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
+            
             fid_cmd = [part for part in base_fid_cmd.split(' ')]
             gen_cmd = [part for part in base_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, gen_image_folder=args.gen_path).split(' ')]
-
             with torch.no_grad():
                 # Generate 5000 images
                 subprocess.Popen(gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
@@ -222,18 +238,17 @@ def train(args):
                 if os.path.exists(gen_image_folder):
                     shutil.rmtree(gen_image_folder)
 
-    loss_data = {'epoch': range(current_iteration, total_iterations+1), 'D_loss': loss_d, 'G_loss': loss_g}
-    loss_df = pd.DataFrame(data=loss_data)
-    loss_df.to_csv('loss.csv')
+    del netG
+    del netD
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='region gan')
 
     parser.add_argument('--path', type=str, default='../lmdbs/art_landscape_1k', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
     parser.add_argument('--gen-path', type=str, default='', help='path of gennerated image from generator for fid')
-    parser.add_argument('--output_path', type=str, default='./', help='Output path for the train results')
     parser.add_argument('--cuda', type=int, default=0, help='index of gpu to use')
     parser.add_argument('--name', type=str, default='test1', help='experiment name')
+    parser.add_argument('--log', type=str, default='no', help='weather to log metrics to wandb')
     parser.add_argument('--iter', type=int, default=50000, help='number of iterations')
     parser.add_argument('--start_iter', type=int, default=0, help='the iteration to start training')
     parser.add_argument('--batch_size', type=int, default=8, help='mini batch number of images')

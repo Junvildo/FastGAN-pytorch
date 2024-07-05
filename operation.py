@@ -58,9 +58,9 @@ def get_dir(args):
     os.makedirs(saved_model_folder, exist_ok=True)
     os.makedirs(saved_image_folder, exist_ok=True)
 
-    for f in os.listdir('./'):
-        if '.py' in f:
-            shutil.copy(f, os.path.join(task_name, f))
+    # for f in os.listdir('./'):
+    #     if '.py' in f:
+    #         shutil.copy(f, os.path.join(task_name, f))
     
     with open(os.path.join(saved_model_folder, '../args.txt'), 'w') as f:
         json.dump(args.__dict__, f, indent=2)
