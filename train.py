@@ -17,7 +17,9 @@ from operation import ImageFolder, InfiniteSamplerWrapper
 from diffaug import DiffAugment
 import pandas as pd
 import wandb
+import os
 import subprocess
+import shutil
 
 policy = 'color,translation,cutout'
 import lpips
@@ -72,10 +74,8 @@ def train(args):
     save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
     gen_image_folder = args.gen_path
-    base_fid_cmd = 'python -m pytorch_fid {data_root} {gen_image_folder} --dims 2048 --num-workers {dataloader_workers}'.format(data_root=data_root, gen_image_folder=gen_image_folder, dataloader_workers=dataloader_workers)
+    base_fid_cmd = 'python -m pytorch_fid {data_root} {gen_image_folder}/img --dims 2048 --num-workers {dataloader_workers}'.format(data_root=data_root, gen_image_folder=gen_image_folder, dataloader_workers=dataloader_workers)
     base_gen_cmd = 'python /kaggle/working/FastGAN-pytorch/eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt {trained_model_path} --dist {gen_image_folder} --cuda 0'
-    base_create_gen_cmd = 'mkdir -p {gen_image_folder}'
-    base_delete_gen_cmd = 'rm -rf {gen_image_folder}'
     device = torch.device("cpu")
     if use_cuda:
         device = torch.device("cuda:0")
@@ -209,12 +209,9 @@ def train(args):
                         'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
             fid_cmd = [part for part in base_fid_cmd.split(' ')]
             gen_cmd = [part for part in base_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, gen_image_folder=args.gen_path).split(' ')]
-            create_gen_cmd = [part for part in base_create_gen_cmd.format(gen_image_folder=args.gen_path).split(' ')]
-            delete_gen_cmd = [part for part in base_delete_gen_cmd.format(gen_image_folder=args.gen_path).split(' ')]
 
             with torch.no_grad():
                 # Generate 5000 images
-                subprocess.Popen(create_gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
                 subprocess.Popen(gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
                 # Calculate FID
@@ -222,7 +219,8 @@ def train(args):
                 o, _ = proc.communicate()
                 fid = float(o.decode('ascii').replace('FID:  ','').strip('\n'))
                 wandb.log({"FID": fid})
-                subprocess.Popen(delete_gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+                if os.path.exists(gen_image_folder):
+                    shutil.rmtree(gen_image_folder)
 
     loss_data = {'epoch': range(current_iteration, total_iterations+1), 'D_loss': loss_d, 'G_loss': loss_g}
     loss_df = pd.DataFrame(data=loss_data)
