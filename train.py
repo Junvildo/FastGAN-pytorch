@@ -71,11 +71,9 @@ def train(args):
     current_iteration = args.start_iter
     save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
-    base_fid_cmd = 'python -m pytorch_fid art-painting/img_gen/ art-painting/img_gen/ --dims 64 --batch-size 4 --num-workers 6'
-    base_gen_cmd = '!python /content/FastGAN-pytorch/eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt /content/drive/MyDrive/Data_For_Colab/FastGAN-pretrained/all_50000_pixel_shuffle.pth --dist /content/dis_1_diff_3_bz_8_pixel_shuffle/'
-    fid_cmd = [part for part in base_fid_cmd.split(' ')]
-    gen_cmd = [part for part in base_gen_cmd.split(' ')]
-
+    gen_image_folder = args.gen_path
+    base_fid_cmd = 'python -m pytorch_fid {data_root} {gen_image_folder} --dims 2048 --batch-size 50 --num-workers {dataloader_workers}'.format(data_root=data_root, gen_image_folder=gen_image_folder, dataloader_workers=dataloader_workers)
+    base_gen_cmd = '!python /kaggle/working/FastGAN-pytorch/eval.py --im_size 256 --n_sample 5000 --batch 50 --ckpt {trained_model_path} --dist {gen_image_folder} --cuda 0'
     device = torch.device("cpu")
     if use_cuda:
         device = torch.device("cuda:0")
@@ -175,19 +173,7 @@ def train(args):
         for p, avg_p in zip(netG.parameters(), avg_param_G):
             avg_p.mul_(0.999).add_(0.001 * p.data)
         
-        if iteration % 5000 == 0:
-            with torch.no_grad():
-                # Generate 5000 images
-                subprocess.Popen(gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-
-                # Calculate FID
-                proc = subprocess.Popen(fid_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                o, _ = proc.communicate()
-                fid = float(o.decode('ascii').replace('FID:  ','').strip('\n'))
-                wandb.log({"FID": fid})
-
-
-        if iteration % 200 == 0:
+        if iteration % 2000 == 0:
             with torch.no_grad():
                 fake_images = netG(fixed_noise)
                 real_grid = vutils.make_grid(real_image, normalize=True)
@@ -196,7 +182,7 @@ def train(args):
                            "Generated Images": [wandb.Image(fake_grid, caption="Generated Images")]})
     
           
-        if iteration % (save_interval*50) == 0:
+        if iteration % save_interval == 0:
             backup_para = copy_G_params(netG)
             load_params(netG, avg_param_G)
             with torch.no_grad():
@@ -217,6 +203,18 @@ def train(args):
                         'g_ema': avg_param_G,
                         'opt_g': optimizerG.state_dict(),
                         'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
+            fid_cmd = [part for part in base_fid_cmd.split(' ')]
+            gen_cmd = [part for part in base_gen_cmd.format(trained_model_path=saved_model_folder+'/all_%d.pth'%iteration, saved_image_folder=args.gen_path).split(' ')]
+
+            with torch.no_grad():
+                # Generate 5000 images
+                subprocess.Popen(gen_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+
+                # Calculate FID
+                proc = subprocess.Popen(fid_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                o, _ = proc.communicate()
+                fid = float(o.decode('ascii').replace('FID:  ','').strip('\n'))
+                wandb.log({"FID": fid})
     loss_data = {'epoch': range(current_iteration, total_iterations+1), 'D_loss': loss_d, 'G_loss': loss_g}
     loss_df = pd.DataFrame(data=loss_data)
     loss_df.to_csv('loss.csv')
@@ -225,6 +223,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='region gan')
 
     parser.add_argument('--path', type=str, default='../lmdbs/art_landscape_1k', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
+    parser.add_argument('--gen-path', type=str, default='', help='path of gennerated image from generator for fid')
     parser.add_argument('--output_path', type=str, default='./', help='Output path for the train results')
     parser.add_argument('--cuda', type=int, default=0, help='index of gpu to use')
     parser.add_argument('--name', type=str, default='test1', help='experiment name')
@@ -234,7 +233,7 @@ if __name__ == "__main__":
     parser.add_argument('--im_size', type=int, default=1024, help='image resolution')
     parser.add_argument('--ckpt', type=str, default='None', help='checkpoint weight path if have one')
     parser.add_argument('--workers', type=int, default=2, help='number of workers for dataloader')
-    parser.add_argument('--save_interval', type=int, default=100, help='number of iterations to save model')
+    parser.add_argument('--save_interval', type=int, default=5000, help='number of iterations to save model')
     parser.add_argument('--freeze', type=int, default=0, help='to freeze pretrained model params or not, 0=No Freeze, 1=Freeze')
 
     args = parser.parse_args()
