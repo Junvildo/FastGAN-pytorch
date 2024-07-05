@@ -246,6 +246,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--path', type=str, default='../lmdbs/art_landscape_1k', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
     parser.add_argument('--gen-path', type=str, default='', help='path of gennerated image from generator for fid')
+    parser.add_argument('--output-path', type=str, default='', help='path of output')
     parser.add_argument('--cuda', type=int, default=0, help='index of gpu to use')
     parser.add_argument('--name', type=str, default='test1', help='experiment name')
     parser.add_argument('--log', type=str, default='no', help='weather to log metrics to wandb')
