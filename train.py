@@ -175,7 +175,7 @@ def train(args):
         
         if iteration % 2000 == 0:
             with torch.no_grad():
-                fake_images = netG(noise)
+                fake_images = netG(noise)[0]
                 real_grid = vutils.make_grid(real_image, normalize=True)
                 fake_grid = vutils.make_grid(fake_images, normalize=True)
                 wandb.log({"Real Images": [wandb.Image(real_grid, caption="Real Images")],
