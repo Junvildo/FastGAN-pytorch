@@ -147,13 +147,6 @@ def train(args):
         noise = torch.Tensor(current_batch_size, nz).normal_(0, 1).to(device)
 
         fake_images = netG(noise)
-
-        if iteration % 2000 == 0:
-            with torch.no_grad():
-                real_grid = vutils.make_grid(real_image, normalize=True)
-                fake_grid = vutils.make_grid(fake_images, normalize=True)
-                wandb.log({"Real Images": [wandb.Image(real_grid, caption="Real Images")],
-                           "Generated Images": [wandb.Image(fake_grid, caption="Generated Images")]})
                 
         real_image = DiffAugment(real_image, policy=policy)
         fake_images = [DiffAugment(fake, policy=policy) for fake in fake_images]
@@ -180,8 +173,13 @@ def train(args):
         for p, avg_p in zip(netG.parameters(), avg_param_G):
             avg_p.mul_(0.999).add_(0.001 * p.data)
         
-
     
+        if iteration % 2000 == 0:
+            with torch.no_grad():
+                real_grid = vutils.make_grid(real_image, normalize=True)
+                fake_grid = vutils.make_grid(fake_images[0], normalize=True)
+                wandb.log({"Real Images": [wandb.Image(real_grid, caption="Real Images")],
+                           "Generated Images": [wandb.Image(fake_grid, caption="Generated Images")]})
           
         if iteration % save_interval == 0:
             backup_para = copy_G_params(netG)
